@@ -420,7 +420,9 @@ def choose_rate(text):
         any(x in w for x in ("xrom", "xl", "gʻ", "oʻ", "str", "nt", "rt", "sh", "ch", "ng"))
         for w in words
     )
-    term_density = (terms + auto_candidates) / max(len(words), 1)
+    # Zichlik faqat avvalgi lug'at terminlariga tegishli bo'lsin.
+    # Yangi kandidat so'zlar alohida threshold orqali boshqariladi.
+    term_density = terms / max(len(words), 1)
 
     # sh/ch/ng tovushlari ko'p bo'lgan maxsus mashq yoki ro'yxat:
     # aynan shu holatda 0% tezlikni tanlaymiz.
