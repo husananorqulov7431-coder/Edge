@@ -62,21 +62,29 @@ jobs:
           import asyncio
           import os
           from pathlib import Path
-          import edge_tts
+
+          from bot import make_audio
+          from pronunciation import prepare_for_tts
 
           async def main():
-              text = (
+              source = (
                   "DNK, sitoplazma, mitoxondriya, hujayra, "
                   "ribosoma va gʻisht. Sh ch ng."
               )
+              prepared = prepare_for_tts(source)
+              print("Production TTS input:")
+              print(prepared)
+
               out = Path("/tmp/tts-smoke.mp3")
-              await edge_tts.Communicate(
-                  text,
-                  os.environ["EDGE_VOICE"],
-                  rate="+10%",
-              ).save(str(out))
+              old_voice = os.environ.get("EDGE_VOICE")
+              if old_voice != "uz-UZ-MadinaNeural":
+                  raise RuntimeError("Kutilgan EDGE_VOICE topilmadi")
+
+              await make_audio(source, 1.10, out)
+
               if not out.exists() or out.stat().st_size < 1024:
                   raise RuntimeError("TTS audio fayli yetarli hajmda yaratilmadi")
-              print(f"TTS smoke test OK: {out.stat().st_size} bytes")
+
+              print(f"Production make_audio smoke test OK: {out.stat().st_size} bytes")
           asyncio.run(main())
           PY
