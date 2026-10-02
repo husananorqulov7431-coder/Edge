@@ -1,18 +1,50 @@
 name: Telegram Bot
 on:
   workflow_dispatch:
+
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
-      - name: Run for 5 minutes
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           EDGE_VOICE: uz-UZ-MadinaNeural
-        run: timeout 5m python bot.py
+        run: |
+          python bot.py &
+          BOT_PID=$!
+
+          # Bot odatda 5 daqiqa faol ishlaydi.
+          # Agar shu paytda Telegram orqali matn qayta ishlanayotgan bo'lsa,
+          # bot ishini tugatib bo'lmaguncha to'xtatilmaydi.
+          sleep 300
+
+          echo "5-minute activity window finished."
+          echo "Stopping bot after current processing completes..."
+
+          # Yangi so'rovlar kelishini to'xtatamiz, mavjud TTS jarayoni
+          # tugashiga qisqa vaqt beramiz.
+          kill -TERM $BOT_PID 2>/dev/null || true
+
+          # Graceful shutdown uchun kutamiz.
+          for i in $(seq 1 60); do
+            if ! kill -0 $BOT_PID 2>/dev/null; then
+              echo "Bot exited cleanly."
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Bot did not exit within grace period; forcing stop."
+          kill -KILL $BOT_PID 2>/dev/null || true
+          wait $BOT_PID 2>/dev/null || true
