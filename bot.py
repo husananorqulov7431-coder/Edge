@@ -188,10 +188,11 @@ async def main():
             f"avtomatik {MAX_CHARS:,} belgigacha bo'lib, "
             "barcha qismlarni parallel audio qilaman va Telegramga "
             "1-qism, 2-qism tartibida yuboraman.\n\n"
-            "/speed — joriy tezlik\n"
-            "/speed 1.2 — tezlikni o'rnatish\n"
-            "/speed 1.5 — masalan 1.5x\n\n"
-            f"Standart tezlik: {DEFAULT_RATE:.1f}x"
+            "/speed — joriy rejim\n"
+            "/speed auto — aqlli avtomatik rejim\n"
+            "/speed 1.2 — qo'lda tezlik\n\n"
+            "AUTO: 1.00x murakkab, 1.08x termin, "
+            "1.10x qolgan, 1.20x oddiy."
         )
 
     @dp.message(Command("speed"))
