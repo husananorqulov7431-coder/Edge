@@ -34,24 +34,56 @@ jobs:
           assert edge_rate(1.08) == "+8%"
           assert edge_rate(1.10) == "+10%"
 
-          text = "DNK, sitoplazma, mitoxondriya, hujayra, g'isht."
-          prepared = prepare_for_tts(text)
+          # 1) sh/ch/ng ga boy ro'yxat: aniq talaffuz uchun 0% tezlik.
+          sound_list = (
+              "Sh, ch va ng tovushlari: shifokor, shilliq, ichak, "
+              "chaqaloq, kuchli, rang, tong, ko'ngil, singil."
+          )
+          sound_rate, sound_level = choose_rate(sound_list)
+          assert sound_rate == 1.00, (sound_rate, sound_level)
+          assert sound_level == "talaffuz", sound_level
 
-          assert "de-en-ka;" in prepared, prepared
-          assert "si-toplazma;" in prepared, prepared
-          assert "mi-to-xondriya;" in prepared, prepared
-          assert "gʻisht" in prepared, prepared
+          sound_prepared = prepare_for_tts(sound_list)
+          assert "; va; " in sound_prepared, sound_prepared
 
+          # Yakka oddiy gapdagi sh/ch/ng hali ham eski tezlik mantiqida qoladi.
+          normal_sound_rate, normal_sound_level = choose_rate(
+              "Shifokor bemorga dori berdi."
+          )
+          assert normal_sound_rate == 1.20, (
+              normal_sound_rate,
+              normal_sound_level,
+          )
+
+          # 2) Kutikulani qo'shimchali shaklda ham to'liq bo'g'inlarga ajratish.
+          assert "ku-ti-ku-la-ni" in prepare_for_tts("kutikulani"), prepare_for_tts("kutikulani")
+
+          # 3) Qisqartmalar.
+          abbrev_prepared = prepare_for_tts(
+              "DNK, RNK, ATP, AI, TTS, PDF, DOCX, TXT."
+          )
+          assert "de-en-ka" in abbrev_prepared, abbrev_prepared
+          assert "er-en-ka" in abbrev_prepared, abbrev_prepared
+          assert "a-te-pe" in abbrev_prepared, abbrev_prepared
+          assert "a-i" in abbrev_prepared, abbrev_prepared
+          assert "te-te-es" in abbrev_prepared, abbrev_prepared
+          assert "pe-de-ef" in abbrev_prepared, abbrev_prepared
+          assert "dok-eks" in abbrev_prepared, abbrev_prepared
+          assert "te-iks-te" in abbrev_prepared, abbrev_prepared
+
+          # Avvalgi tibbiy smart-rate saqlangan.
           rate, level = choose_rate(
               "sitoplazma mitoxondriya hujayra ribosoma eritrotsit leykotsit"
           )
           assert rate == 1.00, (rate, level)
           assert level == "murakkab", level
 
-          print("Prepared TTS text:")
-          print(prepared)
+          print("SH/CH/NG rate:", sound_rate, sound_level)
+          print("SH/CH/NG prepared:", sound_prepared)
+          print("Kutikulani prepared:", prepare_for_tts("kutikulani"))
+          print("Abbreviations prepared:", abbrev_prepared)
           print("Rate checks: +8%, +10% OK")
-          print("Medical smart-rate check: 1.00x / murakkab OK")
+          print("Existing medical smart-rate check: 1.00x / murakkab OK")
           PY
 
       - name: Edge TTS smoke test
@@ -68,8 +100,11 @@ jobs:
 
           async def main():
               source = (
-                  "DNK, sitoplazma, mitoxondriya, hujayra, "
-                  "ribosoma va gʻisht. Sh ch ng."
+                  "Sh, ch va ng tovushlari: shifokor, shilliq, ichak, "
+                  "chaqaloq, kuchli, rang, tong, ko'ngil, singil. "
+                  "Sitoplazma, mitoxondriya, ribosoma, vakuola, plastida, "
+                  "xloroplast, kutikula, stroma. "
+                  "DNK, RNK, ATP, AI, TTS, PDF, DOCX, TXT."
               )
               prepared = prepare_for_tts(source)
               print("Production TTS input:")
@@ -80,7 +115,7 @@ jobs:
               if old_voice != "uz-UZ-MadinaNeural":
                   raise RuntimeError("Kutilgan EDGE_VOICE topilmadi")
 
-              await make_audio(source, 1.10, out)
+              await make_audio(source, 1.00, out)
 
               if not out.exists() or out.stat().st_size < 1024:
                   raise RuntimeError("TTS audio fayli yetarli hajmda yaratilmadi")
