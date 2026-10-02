@@ -152,15 +152,15 @@ async def handle_text(message, text):
                         f"{index}-qism / {total}\n"
                         f"Belgilar: {len(chunk):,}\n"
                         f"Daraja: {level}\n"
-                        f"Tezlik: {part_rate:.2f}x"
+                        f"Tezlik: {part_rate:.2f}x | Rate: {edge_rate(part_rate)}"
                     ),
                 )
 
             if auto:
                 await status.edit_text(
                     f"Tayyor! {total} ta qism yuborildi.\n"
-                    "AUTO: 1.00x murakkab | 1.08x termin | "
-                    "1.10x qolgan | 1.20x oddiy"
+                    "AUTO: 1.00x (+0%) murakkab | 1.08x (+8%) termin | "
+                    "1.10x (+10%) qolgan | 1.20x (+20%) oddiy"
                 )
             else:
                 await status.edit_text(
@@ -200,14 +200,14 @@ async def main():
         args = (m.text or "").split(maxsplit=1)
         if len(args) == 1:
             if auto_mode.get(m.from_user.id, True):
-                await m.answer("AUTO: 1.00x murakkab | 1.08x termin | 1.10x qolgan | 1.20x oddiy")
+                await m.answer("AUTO: 1.00x (+0%) murakkab | 1.08x (+8%) termin | 1.10x (+10%) qolgan | 1.20x oddiy (+20%)")
             else:
                 await m.answer(f"QO'LLANMA: {rates.get(m.from_user.id, DEFAULT_RATE):.2f}x")
             return
         arg = args[1].strip().lower()
         if arg == "auto":
             auto_mode[m.from_user.id] = True
-            await m.answer("AUTO yoqildi: 1.00x / 1.08x / 1.10x / 1.20x")
+            await m.answer("AUTO yoqildi: +0% / +8% / +10% / +20% (1.00x / 1.08x / 1.10x / 1.20x)")
             return
         try:
             rate = float(arg.replace(",", "."))
