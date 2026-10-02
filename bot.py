@@ -150,11 +150,18 @@ async def handle_text(message, text):
                 )
 
             await progress(status, total, total, "✅ Barcha qismlar tayyor")
-            await status.edit_text(
-                f"✅ Tayyor! {total} ta qism yuborildi.\n"
-                f"Tezlik: {rate:.1f}x\n"
-                f"Har qism: ko'pi bilan {MAX_CHARS:,} belgi."
-            )
+            if auto:
+                await status.edit_text(
+                    f"✅ Tayyor! {total} ta qism yuborildi.\n"
+                    "Rejim: AUTO\n"
+                    "Murakkab: 1.00x | Termin: 1.08x | "
+                    "Qolgan: 1.10x | Oddiy: 1.20x"
+                )
+            else:
+                await status.edit_text(
+                    f"✅ Tayyor! {total} ta qism yuborildi.\n"
+                    f"Rejim: QO'LLANMA | Tezlik: {rates.get(user_id, DEFAULT_RATE):.2f}x"
+                )
         except Exception as e:
             for task in locals().get("tasks", []):
                 if not task.done():
