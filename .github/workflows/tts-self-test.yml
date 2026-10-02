@@ -71,6 +71,22 @@ jobs:
           assert "dok-eks" in abbrev_prepared, abbrev_prepared
           assert "te-iks-te" in abbrev_prepared, abbrev_prepared
 
+          # 4) Lug'atda yo'q yangi tibbiy terminni avtomatik bo'g'inlash.
+          new_term = "glomerulonefrit"
+          new_term_prepared = prepare_for_tts(new_term)
+          assert new_term_prepared == "glo-me-ru-lo-nef-rit", new_term_prepared
+          new_term_rate, new_term_level = choose_rate(new_term)
+          assert new_term_rate == 1.08, (new_term_rate, new_term_level)
+          assert new_term_level == "termin", new_term_level
+
+          # 5) Lug'atdagi terminning o'zbekcha qo'shimchalari ham avtomatik ulanadi.
+          assert "ku-ti-ku-la-ning" in prepare_for_tts("kutikulaning")
+          assert "nef-ron-lar" in prepare_for_tts("nefronlar")
+
+          # 6) Oddiy uzun so'zlar ilmiy deb noto'g'ri qayta yozilmaydi.
+          ordinary = "Universitet talabalarining ma'ruzalari tayyor."
+          assert prepare_for_tts(ordinary) == ordinary, prepare_for_tts(ordinary)
+
           # Avvalgi tibbiy smart-rate saqlangan.
           rate, level = choose_rate(
               "sitoplazma mitoxondriya hujayra ribosoma eritrotsit leykotsit"
@@ -82,6 +98,9 @@ jobs:
           print("SH/CH/NG prepared:", sound_prepared)
           print("Kutikulani prepared:", prepare_for_tts("kutikulani"))
           print("Abbreviations prepared:", abbrev_prepared)
+          print("New term:", new_term, "->", new_term_prepared, "|", new_term_rate, new_term_level)
+          print("Morphology:", prepare_for_tts("kutikulaning"), "|", prepare_for_tts("nefronlar"))
+          print("Ordinary text unchanged:", prepare_for_tts(ordinary))
           print("Rate checks: +8%, +10% OK")
           print("Existing medical smart-rate check: 1.00x / murakkab OK")
           PY
