@@ -111,7 +111,6 @@ TECHNICAL_ROOTS = (
     "pulmono",
     "laring",
     "faring",
-    "rin",
     "traxe",
     "immuno",
     "immunoglob",
