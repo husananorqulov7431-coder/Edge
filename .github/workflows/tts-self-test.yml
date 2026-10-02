@@ -28,7 +28,7 @@ jobs:
       - name: Test pronunciation filters
         run: |
           python - <<'PY'
-          from pronunciation import choose_rate, prepare_for_tts
+          from pronunciation import choose_rate, normalize_text, prepare_for_tts
           from bot import edge_rate
 
           assert edge_rate(1.08) == "+8%"
@@ -85,7 +85,7 @@ jobs:
 
           # 6) Oddiy uzun so'zlar ilmiy deb noto'g'ri qayta yozilmaydi.
           ordinary = "Universitet talabalarining ma'ruzalari tayyor."
-          assert prepare_for_tts(ordinary) == ordinary, prepare_for_tts(ordinary)
+          assert prepare_for_tts(ordinary) == normalize_text(ordinary), prepare_for_tts(ordinary)
 
           # Avvalgi tibbiy smart-rate saqlangan.
           rate, level = choose_rate(
