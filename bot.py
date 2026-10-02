@@ -12,7 +12,8 @@ DEFAULT_RATE = 1.2
 MAX_CHARS = 14800
 rates = {}
 
-def edge_rate(rate): return f"{round((rate - 1) * 100):+d}%"
+def edge_rate(rate):
+    return f"{round((rate - 1) * 100):+d}%"
 
 def docx_text(path):
     doc = Document(path)
@@ -28,7 +29,6 @@ def split_text(text, max_chars=MAX_CHARS):
     text = normalize_text(text)
     if len(text) <= max_chars:
         return [text]
-
     blocks = [b.strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
     chunks, current = [], ""
 
@@ -54,7 +54,6 @@ def split_text(text, max_chars=MAX_CHARS):
         if len(block) <= max_chars:
             add_piece(block)
             continue
-
         sentences = re.split(r"(?<=[.!?…])\s+", block)
         for sentence in sentences:
             sentence = sentence.strip()
@@ -63,7 +62,6 @@ def split_text(text, max_chars=MAX_CHARS):
             if len(sentence) <= max_chars:
                 add_piece(sentence)
                 continue
-
             words, buf = sentence.split(), ""
             for word in words:
                 candidate = word if not buf else buf + " " + word
@@ -78,23 +76,18 @@ def split_text(text, max_chars=MAX_CHARS):
                     buf = word
             if buf:
                 add_piece(buf)
-
     flush()
     return chunks
 
 async def make_audio(text, rate, out):
-    await edge_tts.Communicate(
-        text, VOICE, rate=edge_rate(rate)
-    ).save(str(out))
+    await edge_tts.Communicate(text, VOICE, rate=edge_rate(rate)).save(str(out))
 
-async def progress(status, current, total, part):
+async def progress(status, current, total, label):
     percent = round(current / total * 100)
     filled = percent // 10
     bar = "█" * filled + "░" * (10 - filled)
     await status.edit_text(
-        f"🎙 {part}\n"
-        f"[{bar}] {percent}%\n"
-        f"Qism: {current}/{total}"
+        f"🎙 {label}\n[{bar}] {percent}%\nQism: {current}/{total}"
     )
 
 async def handle_text(message, text):
@@ -108,37 +101,64 @@ async def handle_text(message, text):
     total = len(chunks)
 
     status = await message.answer(
-        f"🎙 Tayyorlanmoqda…\n"
-        f"[░░░░░░░░░░] 0%\n"
-        f"Qismlar: {total}\n"
-        f"Tezlik: {rate:.1f}x"
+        f"🎙 Tayyorlanmoqda…\n[░░░░░░░░░░] 0%\n"
+        f"Qismlar: {total}\nTezlik: {rate:.1f}x"
     )
 
     with tempfile.TemporaryDirectory() as td:
         try:
-            for index, chunk in enumerate(chunks, 1):
-                await progress(status, index - 1, total,
-                                f"{index}-qism tayyorlanmoqda…")
+            async def generate_part(index, chunk):
                 out = Path(td) / f"part_{index:03d}.mp3"
                 await make_audio(chunk, rate, out)
+                return index, chunk, out
 
+            # Barcha qismlar bir vaqtning o'zida yaratiladi.
+            tasks = [
+                asyncio.create_task(generate_part(index, chunk))
+                for index, chunk in enumerate(chunks, 1)
+            ]
+
+            # Haqiqiy tugagan audio qismlar bo'yicha progress.
+            completed = 0
+            pending = set(tasks)
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                completed += len(done)
+                await progress(
+                    status,
+                    completed,
+                    total,
+                    f"🎙 Parallel audio tayyorlanmoqda: {completed}/{total}",
+                )
+
+            # Natijalarni 1,2,3... tartibiga qaytaramiz.
+            results = await asyncio.gather(*tasks)
+            results.sort(key=lambda item: item[0])
+
+            # Telegramga faqat tartibli yuboriladi.
+            for index, chunk, out in results:
                 await message.answer_audio(
                     FSInputFile(out),
                     caption=(
                         f"🎧 {index}-qism / {total}\n"
                         f"Belgilar: {len(chunk):,}\n"
                         f"Tezlik: {rate:.1f}x"
-                    )
+                    ),
                 )
-                await progress(status, index, total,
-                                f"✅ {index}-qism tayyor")
 
+            await progress(status, total, total, "✅ Barcha qismlar tayyor")
             await status.edit_text(
                 f"✅ Tayyor! {total} ta qism yuborildi.\n"
                 f"Tezlik: {rate:.1f}x\n"
                 f"Har qism: ko'pi bilan {MAX_CHARS:,} belgi."
             )
         except Exception as e:
+            for task in locals().get("tasks", []):
+                if not task.done():
+                    task.cancel()
             await status.edit_text(f"❌ Ovoz yaratishda xatolik: {e}")
 
 async def main():
@@ -154,7 +174,8 @@ async def main():
             "Assalomu alaykum!\n\n"
             "TXT, DOCX yoki oddiy matn yuboring. Men katta matnni "
             f"avtomatik {MAX_CHARS:,} belgigacha bo'lib, "
-            "1-qism, 2-qism tartibida audio qilib yuboraman.\n\n"
+            "barcha qismlarni parallel audio qilaman va Telegramga "
+            "1-qism, 2-qism tartibida yuboraman.\n\n"
             "/speed — joriy tezlik\n"
             "/speed 1.2 — tezlikni o'rnatish\n"
             "/speed 1.5 — masalan 1.5x\n\n"
