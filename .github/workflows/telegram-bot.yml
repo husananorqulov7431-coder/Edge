@@ -1,0 +1,18 @@
+name: Telegram Bot
+on:
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run for 5 minutes
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          EDGE_VOICE: uz-UZ-MadinaNeural
+        run: timeout 5m python bot.py
