@@ -5,7 +5,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run bot
+      - name: Run bot for 5 minutes, then finish active work
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           EDGE_VOICE: uz-UZ-MadinaNeural
@@ -24,27 +24,19 @@ jobs:
           python bot.py &
           BOT_PID=$!
 
-          # Bot odatda 5 daqiqa faol ishlaydi.
-          # Agar shu paytda Telegram orqali matn qayta ishlanayotgan bo'lsa,
-          # bot ishini tugatib bo'lmaguncha to'xtatilmaydi.
+          # Botning asosiy faol ishlash oynasi — 5 daqiqa.
           sleep 300
 
-          echo "5-minute activity window finished."
-          echo "Stopping bot after current processing completes..."
+          echo "5-minute window finished."
+          echo "Graceful shutdown requested."
 
-          # Yangi so'rovlar kelishini to'xtatamiz, mavjud TTS jarayoni
-          # tugashiga qisqa vaqt beramiz.
-          kill -TERM $BOT_PID 2>/dev/null || true
+          # Telegram pollingni to'xtatish uchun signal.
+          # Hozir bajarilayotgan Python/Edge-TTS operatsiyasi
+          # yakunlanishiga imkon beriladi.
+          kill -TERM "$BOT_PID" 2>/dev/null || true
 
-          # Graceful shutdown uchun kutamiz.
-          for i in $(seq 1 60); do
-            if ! kill -0 $BOT_PID 2>/dev/null; then
-              echo "Bot exited cleanly."
-              exit 0
-            fi
-            sleep 1
-          done
+          # Jarayon o'zini toza yopishini kutamiz.
+          # Bu qo'shimcha yangi ish boshlamaydi; faqat mavjud ish tugashini kutadi.
+          wait "$BOT_PID" || true
 
-          echo "Bot did not exit within grace period; forcing stop."
-          kill -KILL $BOT_PID 2>/dev/null || true
-          wait $BOT_PID 2>/dev/null || true
+          echo "Bot and active work finished."
