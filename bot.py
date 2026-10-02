@@ -1,6 +1,7 @@
 import asyncio, os, re, tempfile
 from pathlib import Path
 import edge_tts
+from pronunciation import choose_rate, prepare_for_tts
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import FSInputFile, Message
@@ -11,6 +12,7 @@ VOICE = os.getenv("EDGE_VOICE", "uz-UZ-MadinaNeural")
 DEFAULT_RATE = 1.2
 MAX_CHARS = 14800
 rates = {}
+auto_mode = {}
 
 def edge_rate(rate):
     return f"{round((rate - 1) * 100):+d}%"
@@ -80,7 +82,8 @@ def split_text(text, max_chars=MAX_CHARS):
     return chunks
 
 async def make_audio(text, rate, out):
-    await edge_tts.Communicate(text, VOICE, rate=edge_rate(rate)).save(str(out))
+    prepared = prepare_for_tts(text)
+    await edge_tts.Communicate(prepared, VOICE, rate=edge_rate(rate)).save(str(out))
 
 async def progress(status, current, total, label):
     percent = round(current / total * 100)
@@ -97,77 +100,78 @@ async def handle_text(message, text):
         return
 
     chunks = split_text(text)
-    rate = rates.get(message.from_user.id, DEFAULT_RATE)
-    total = len(chunks)
+    user_id = message.from_user.id
+    auto = auto_mode.get(user_id, True)
+    selected = []
+    for chunk in chunks:
+        if auto:
+            part_rate, level = choose_rate(chunk)
+        else:
+            part_rate, level = rates.get(user_id, DEFAULT_RATE), "qo'lda"
+        selected.append((part_rate, level, chunk))
 
+    total = len(chunks)
+    mode_label = "AUTO" if auto else "QO'LLANMA"
     status = await message.answer(
-        f"🎙 Tayyorlanmoqda…\n[░░░░░░░░░░] 0%\n"
-        f"Qismlar: {total}\nTezlik: {rate:.1f}x"
+        f"Tayyorlanmoqda...\n[░░░░░░░░░░] 0%\n"
+        f"Qismlar: {total}\nRejim: {mode_label}"
     )
 
     with tempfile.TemporaryDirectory() as td:
+        tasks = []
         try:
-            async def generate_part(index, chunk):
+            async def generate_part(index, chunk, part_rate, level):
                 out = Path(td) / f"part_{index:03d}.mp3"
-                await make_audio(chunk, rate, out)
-                return index, chunk, out
+                await make_audio(chunk, part_rate, out)
+                return index, chunk, out, part_rate, level
 
-            # Barcha qismlar bir vaqtning o'zida yaratiladi.
             tasks = [
-                asyncio.create_task(generate_part(index, chunk))
-                for index, chunk in enumerate(chunks, 1)
+                asyncio.create_task(generate_part(index, chunk, part_rate, level))
+                for index, (part_rate, level, chunk) in enumerate(selected, 1)
             ]
 
-            # Haqiqiy tugagan audio qismlar bo'yicha progress.
             completed = 0
             pending = set(tasks)
             while pending:
                 done, pending = await asyncio.wait(
-                    pending,
-                    return_when=asyncio.FIRST_COMPLETED,
+                    pending, return_when=asyncio.FIRST_COMPLETED
                 )
                 completed += len(done)
                 await progress(
-                    status,
-                    completed,
-                    total,
-                    f"🎙 Parallel audio tayyorlanmoqda: {completed}/{total}",
+                    status, completed, total,
+                    f"Parallel audio tayyorlanmoqda: {completed}/{total}",
                 )
 
-            # Natijalarni 1,2,3... tartibiga qaytaramiz.
             results = await asyncio.gather(*tasks)
             results.sort(key=lambda item: item[0])
 
-            # Telegramga faqat tartibli yuboriladi.
-            for index, chunk, out in results:
+            for index, chunk, out, part_rate, level in results:
                 await message.answer_audio(
                     FSInputFile(out),
                     caption=(
-                        f"🎧 {index}-qism / {total}\n"
+                        f"{index}-qism / {total}\n"
                         f"Belgilar: {len(chunk):,}\n"
-                        f"Tezlik: {rate:.1f}x"
+                        f"Daraja: {level}\n"
+                        f"Tezlik: {part_rate:.2f}x"
                     ),
                 )
 
-            await progress(status, total, total, "✅ Barcha qismlar tayyor")
             if auto:
                 await status.edit_text(
-                    f"✅ Tayyor! {total} ta qism yuborildi.\n"
-                    "Rejim: AUTO\n"
-                    "Murakkab: 1.00x | Termin: 1.08x | "
-                    "Qolgan: 1.10x | Oddiy: 1.20x"
+                    f"Tayyor! {total} ta qism yuborildi.\n"
+                    "AUTO: 1.00x murakkab | 1.08x termin | "
+                    "1.10x qolgan | 1.20x oddiy"
                 )
             else:
                 await status.edit_text(
-                    f"✅ Tayyor! {total} ta qism yuborildi.\n"
-                    f"Rejim: QO'LLANMA | Tezlik: {rates.get(user_id, DEFAULT_RATE):.2f}x"
+                    f"Tayyor! {total} ta qism yuborildi.\n"
+                    f"QO'LLANMA: {rates.get(user_id, DEFAULT_RATE):.2f}x"
                 )
         except Exception as e:
-            for task in locals().get("tasks", []):
+            for task in tasks:
                 if not task.done():
                     task.cancel()
-            await status.edit_text(f"❌ Ovoz yaratishda xatolik: {e}")
-
+            await status.edit_text(f"Ovoz yaratishda xatolik: {e}")
 async def main():
     if not TOKEN:
         raise RuntimeError("BOT_TOKEN secret topilmadi")
@@ -177,6 +181,7 @@ async def main():
     @dp.message(CommandStart())
     async def start(m):
         rates[m.from_user.id] = DEFAULT_RATE
+        auto_mode[m.from_user.id] = True
         await m.answer(
             "Assalomu alaykum!\n\n"
             "TXT, DOCX yoki oddiy matn yuboring. Men katta matnni "
@@ -193,24 +198,26 @@ async def main():
     async def speed(m):
         args = (m.text or "").split(maxsplit=1)
         if len(args) == 1:
-            await m.answer(
-                f"Joriy tezlik: {rates.get(m.from_user.id, DEFAULT_RATE):.1f}x\n"
-                "Oraliq: 0.5x–2.0x"
-            )
+            if auto_mode.get(m.from_user.id, True):
+                await m.answer("AUTO: 1.00x murakkab | 1.08x termin | 1.10x qolgan | 1.20x oddiy")
+            else:
+                await m.answer(f"QO'LLANMA: {rates.get(m.from_user.id, DEFAULT_RATE):.2f}x")
+            return
+        arg = args[1].strip().lower()
+        if arg == "auto":
+            auto_mode[m.from_user.id] = True
+            await m.answer("AUTO yoqildi: 1.00x / 1.08x / 1.10x / 1.20x")
             return
         try:
-            rate = float(args[1].replace(",", "."))
+            rate = float(arg.replace(",", "."))
             if not 0.5 <= rate <= 2.0:
                 raise ValueError
         except ValueError:
-            await m.answer(
-                "Tezlik 0.5x–2.0x oralig'ida bo'lishi kerak. "
-                "Masalan: /speed 1.4"
-            )
+            await m.answer("/speed auto yoki 0.5x-2.0x oralig'idagi qiymat: /speed 1.4")
             return
         rates[m.from_user.id] = rate
-        await m.answer(f"✅ Tezlik saqlandi: {rate:.1f}x")
-
+        auto_mode[m.from_user.id] = False
+        await m.answer(f"Qo'lda tezlik: {rate:.2f}x")
     @dp.message(F.document)
     async def file_handler(m, bot):
         name = m.document.file_name or "file"
